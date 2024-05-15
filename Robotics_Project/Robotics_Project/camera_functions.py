@@ -72,13 +72,15 @@ def merge_horizontal_lines(lines, horizontal_threshold=10, merge_threshold=5, to
 
 CASES = {
     (1,0,0): [0,1,0,0],     # NO  forward NO  right NO  left      WE have 1 line , 0 in the first 1/6 and 0 in the last 1/6
-    (3,1,1): [1,1,0,1],     # YES forward YES right YES left      WE have 3 lines, 1 in the first 1/6 and 1 in the last 1/6
+    (3,1,1): [1,1,1,1],     # YES forward YES right YES left      WE have 3 lines, 1 in the first 1/6 and 1 in the last 1/6
     (2,0,1): [1,1,1,0],     # YES forward YES right NO  left      WE have 2 lines, 0 in the first 1/6 and 1 in the last 1/6
     (2,1,0): [1,1,0,1],     # YES forward NO  right YES left      WE have 2 lines, 1 in the first 1/6 and 0 in the last 1/6
     (2,1,1): [0,1,1,1],     # NO  forward YES right YES left      WE have 2 lines, 1 in the first 1/6 and 1 in the last 1/6
     (1,1,0): [0,1,1,0],     # NO  forward YES right NO  left      WE have 1 line , 1 in the first 1/6 and 0 in the last 1/6
     (1,0,1): [0,1,0,1]      # NO  forward NO  right YES left      WE have 1 line , 0 in the first 1/6 and 1 in the last 1/6
 }
+
+
 
 # Just for debug
 CASES_NAME = {  
@@ -94,44 +96,44 @@ CASES_NAME = {
 
 
 
-def select_type(img,threshold_first_last=10, show=True,debug=False):
+# def select_type(img,threshold_first_last=10, show=True,debug=False):
 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY)[1]
-    edges = cv2.Canny(gray, 50, 200)
-    kernel = np.ones((2,2),np.uint8)
-    edges = cv2.dilate(edges,kernel,iterations = 1)
+#     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+#     gray = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY)[1]
+#     edges = cv2.Canny(gray, 50, 200)
+#     kernel = np.ones((2,2),np.uint8)
+#     edges = cv2.dilate(edges,kernel,iterations = 1)
 
-    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=20, minLineLength=5, maxLineGap=5)
+#     lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=20, minLineLength=5, maxLineGap=5)
 
-    # plot all lines
-    # image_tmp2 = img.copy()
-    # for line in lines:
-    #     x1, y1, x2, y2 = line[0]
-    #     cv2.line(image_tmp2, (x1, y1), (x2, y2), (0, 255, 0), 2)
-    # plt.imshow(cv2.cvtColor(image_tmp2, cv2.COLOR_BGR2RGB))
-    # plt.title("All lines")
-    # plt.show()
+#     # plot all lines
+#     # image_tmp2 = img.copy()
+#     # for line in lines:
+#     #     x1, y1, x2, y2 = line[0]
+#     #     cv2.line(image_tmp2, (x1, y1), (x2, y2), (0, 255, 0), 2)
+#     # plt.imshow(cv2.cvtColor(image_tmp2, cv2.COLOR_BGR2RGB))
+#     # plt.title("All lines")
+#     # plt.show()
     
-    merged_lines = merge_horizontal_lines(lines)
+#     merged_lines = merge_horizontal_lines(lines)
 
 
-    first_line = 0
-    last_line = 0
-    number_of_lines = len(merged_lines)
-    for line in merged_lines:
-        x1, y1, x2, y2 = line
-        if x1 < threshold_first_last:
-            first_line += 1
-        if x2 > img.shape[1]-threshold_first_last:
-            last_line += 1
+#     first_line = 0
+#     last_line = 0
+#     number_of_lines = len(merged_lines)
+#     for line in merged_lines:
+#         x1, y1, x2, y2 = line
+#         if x1 < threshold_first_last:
+#             first_line += 1
+#         if x2 > img.shape[1]-threshold_first_last:
+#             last_line += 1
     
-    if first_line > 1:
-        first_line = 1
-    if last_line > 1:
-        last_line = 1
-    if number_of_lines > 3:
-        number_of_lines = 3
+#     if first_line > 1:
+#         first_line = 1
+#     if last_line > 1:
+#         last_line = 1
+#     if number_of_lines > 3:
+#         number_of_lines = 3
 
 
 
@@ -211,7 +213,7 @@ def select_type(img,threshold_first_last=10, show=True,debug=False):
         # if x_1 < middle of the image and x_2 > middle of the image
         for line in merged_lines:
             x1, y1, x2, y2 = line
-            if x1 < img.shape[1]/2 and x2 > img.shape[1]/2:
+            if x1 < img.shape[0]/2 and x2 > img.shape[0]/2:
                 lines_middle.append(line)
 
         longest_line = 0
@@ -220,7 +222,9 @@ def select_type(img,threshold_first_last=10, show=True,debug=False):
             if x2-x1 > longest_line:
                 longest_line = x2-x1
 
-        if longest_line < 250:
+        #print("len_middle_line", longest_line, img.shape[0] * 6/10)
+
+        if longest_line < img.shape[1] * 5/10:
             number_of_lines = 1000
 
         if debug:
@@ -235,13 +239,15 @@ def select_type(img,threshold_first_last=10, show=True,debug=False):
     name = "not case"
     value = [0,0,0,0]
 
+
     if key_case not in CASES:
-        print("Case not found")
+        #print("Case not found")
+        value = [0,0,0,0]
     else:
         value = CASES[key_case]
         name = CASES_NAME[key_case]
         
-    
+
     if debug:
         print("first_1_4: ", first_line)
         print("last_1_4: ", last_line)
@@ -259,6 +265,8 @@ def select_type(img,threshold_first_last=10, show=True,debug=False):
         # plt.show()
         cv2.imshow("Image with lines", img)
         cv2.waitKey(1)
+
+    return value
     
 
 
@@ -312,12 +320,12 @@ def plot_img_with_line2(img, debug=False):
     merged_lines, _ = merge_horizontal_lines(lines)
 
     # plot the merged lines
-    #for line in merged_lines:
-    #    x1, y1, x2, y2 = line
-    #    cv2.line(img_tmp, (x1, y1), (x2, y2), (0, 0, 255), 2)
-    #plt.imshow(cv2.cvtColor(img_tmp, cv2.COLOR_BGR2RGB))
-    #plt.title('Merged Lines')
-    #plt.show()
+    for line in merged_lines:
+        x1, y1, x2, y2 = line
+        cv2.line(img_tmp, (x1, y1), (x2, y2), (0, 0, 255), 2)
+    plt.imshow(cv2.cvtColor(img_tmp, cv2.COLOR_BGR2RGB))
+    plt.title('Merged Lines')
+    plt.show()
 
     # show the image with the lines with cv2.imshow
     for line in merged_lines:
@@ -325,3 +333,116 @@ def plot_img_with_line2(img, debug=False):
         cv2.line(img_tmp, (x1, y1), (x2, y2), (255, 0, 0), 2)
         cv2.imshow("Image with lines", img_tmp)
     cv2.waitKey(1)
+
+
+
+# NOTE Debug work on jupiter notebook 
+
+def check_if_sample(img, debug=False):
+    # black and white
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray = cv2.GaussianBlur(gray, (5, 5), 0)
+    gray = cv2.blur(gray, (3, 3))
+    low_threshold = 185
+    high_threshold = 195
+    mask = cv2.inRange(gray, low_threshold, high_threshold)
+
+    if debug:
+        plt.imshow(mask, cmap='gray')
+        plt.title("Mask")
+        plt.show()
+
+
+    edges = cv2.Canny(mask, 50, 200)
+    lines = cv2.HoughLinesP(edges, 1, np.pi/180, 100, minLineLength=150, maxLineGap=50)
+
+    # if no lines detected return False and -1
+    if lines is None:
+        return False, -1
+
+    if debug:
+        image_tmp = img.copy()
+        for line in lines:
+            x1, y1, x2, y2 = line[0]
+            cv2.line(image_tmp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+        plt.imshow(cv2.cvtColor(image_tmp, cv2.COLOR_BGR2RGB))
+        plt.title('ALL Lines')
+        plt.show()
+
+        print("Number of lines", len(lines))
+    
+    # get only horizontal lines
+    horizontal_lines = []
+    for line in lines:
+        x1, y1, x2, y2 = line[0]
+        diff_y = y2 - y1
+        if abs(diff_y) < 5:
+            horizontal_lines.append(line)
+
+    if debug:
+        # plot the lines
+        for line in horizontal_lines:
+            x1, y1, x2, y2 = line[0]
+            cv2.line(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+        plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        plt.title('Detected Lines')
+        plt.show()
+
+
+
+    # check if a line have y between 145 and 155
+
+    middle_y = img.shape[0] * 5/8
+    Sample_line = False
+    min_diff = 100000
+    for line in horizontal_lines:
+        x1, y1, x2, y2 = line[0]
+        if y1 > middle_y-5 and y1 < middle_y+5:
+            if min_diff > abs((y2-y1)/(x2-x1)):
+                min_diff = ((y2-y1)/(x2-x1))
+            Sample_line = True
+        if y2 > middle_y-5 and y2 < middle_y+5:
+            Sample_line = True
+            if min_diff > abs((y2-y1)/(x2-x1)):
+                min_diff = ((y2-y1)/(x2-x1))
+
+    ###########################
+    ###########################
+    ###########################
+    ###########################
+    ###########################
+    ###########################
+    if False:
+        image_tmp = img.copy()
+        for line in horizontal_lines:
+            x1, y1, x2, y2 = line[0]
+            cv2.line(image_tmp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.line(image_tmp, (0, int(middle_y-5)), (img.shape[1], int(middle_y-5)), (255, 0, 0), 2)
+        cv2.line(image_tmp, (0, int(middle_y+5)), (img.shape[1], int(middle_y+5)), (255, 0, 0), 2)
+        cv2.imshow("Image with lines", image_tmp)
+        cv2.waitKey(1)
+
+
+    if Sample_line:
+        return Sample_line , min_diff
+    
+    
+    # now we can check the difference between y1 and y2 for the line with biggest y2
+    lines_sorted = sorted(lines, key=lambda x: x[0][3])
+    x1, y1, x2, y2 = lines_sorted[-1][0]
+
+    # plot the lines_sorted[-1]
+    if debug:
+        image_tmp = img.copy()
+        cv2.line(image_tmp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        plt.imshow(cv2.cvtColor(image_tmp, cv2.COLOR_BGR2RGB))
+        plt.title('Line with biggest y2')
+        plt.show()
+
+    min_diff = ((y2-y1)/(x2-x1))
+
+    return Sample_line ,  min_diff 
+
