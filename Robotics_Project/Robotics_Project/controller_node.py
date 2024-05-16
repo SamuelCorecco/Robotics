@@ -82,10 +82,13 @@ class ControllerNode(Node):
         self.next_direction = None  # self.next_direction
         self.flag_angle_See = None  # we need to se id line are correct or not
 
-        self.STATE = 0              # STATE 0   == EXPLORE
-                                    # STATE 0.5 == EXPLORE but we are in front of an explored node --> we need to enter do 3 sec go forward
-                                    # STATE 1 == GO next node to explore
+        self.STATE = 0              # STATE 0 == EXPLORE
+                                    # STATE 1 == EXPLORE but we are in front of an explored node --> we need to enter do 3 sec go forward
+                                    # STATE 2 == we are rotate for do a curve, we need to go back to see next node
+                                    # 
+                                    # STATE 999 == GO next node to explore cambia pure numero
         self.timer_05 = None
+        self.timer_02 = None        # timer to go back in state 2
 
 
 
@@ -97,8 +100,8 @@ class ControllerNode(Node):
         if self.STATE == 0:
 
             # if we need to rotate --> no information of camera are needed
-            #if self.go_back > 0:
-            #    return
+            if self.go_back > 0:
+                return
             
             bridge = CvBridge()
             cv_image = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
@@ -131,7 +134,7 @@ class ControllerNode(Node):
             # STEP 2 we have 2 case:    a) we need to sample the node type
             #                           b) no sample (we have 2 possibility doing nothing or create new node)
             # STEP 2 a:     get type of next node in [North, sout, Est, West] that are the neigbhoor 
-            if sample_flag:
+            if sample_flag :
                 value = select_type(image_tmp)
                 # if any(value):
                 if value != [0,0,0,0]:
@@ -172,13 +175,12 @@ class ControllerNode(Node):
                     curr_time = time.time()
                     if self.prev_node_id >= 0:
                         distance = (curr_time - self.old_time)
-                        is_close_a_node = self.graph.exist_closed_node(self.prev_node_id,self.orientation,distance, threshold=4)
-                        print(self.prev_node_id, is_close_a_node)
+                        is_close_a_node = self.graph.exist_closed_node(self.prev_node_id,self.orientation,distance,max_key, threshold=2)
                         # if the node is already visited stop and go next node
                         if is_close_a_node is not None:
                             self.graph.add_edge(self.prev_node_id , is_close_a_node, self.orientation, distance)
                             self.prev_node_id = is_close_a_node
-                            self.STATE = 0.5
+                            self.STATE = 1
                             self.timer_05 = time.time()
                             return
                         
@@ -214,11 +216,12 @@ class ControllerNode(Node):
         # this just align the back sensors
         if self.STATE == 0:
             if self.go_back == 2:
+                print("AJHGJDSGHJDGASJGDJHGASD")
                 diff_r_l = np.sign(self.back_r )*self.back_r - np.sign(self.back_l )*self.back_l
                 if (self.back_r == -1 or self.back_l ==-1) or np.abs(diff_r_l) > self.threshoold:
                     self.angle_rot = 0.2
                     if (self.back_r != -1 or self.back_l !=-1):
-                        self.angle_rot = -1*diff_r_l
+                        self.angle_rot = -1/2*diff_r_l
                     self.threshoold = 0.003
 
                 else:
@@ -226,7 +229,10 @@ class ControllerNode(Node):
                     self.threshoold += 0.002        # this is done for better accuration
                     if self.threshoold > 0.02:
                         self.threshoold = 0.01      # reset the initial threshoold
-                        self.STATE = 1
+                        self.STATE = 999
+                        self.speed = 0.0 # todo cancella
+        
+                
 
     
     def center_callback(self, msg):
@@ -238,12 +244,18 @@ class ControllerNode(Node):
                 self.angle_rot = 0.0
                 self.speed = 0.0
                 if self.go_back == 1:
-                    self.go_back = 2
+                    if self.center_obj < 0.07:
+                        self.go_back = 2
+                        self.speed = 0.0
+                    else:
+                        # if we are in 0.15 we can't use back sensore
+                        self.speed = 0.02
                 elif self.go_back == 0:
                     next_dir = self.graph.get_direction_uneplored(self.prev_node_id)
                     if next_dir:
                         self.curve = get_angle(self.orientation, next_dir)
                         self.next_direction = next_dir
+
 
 
 
@@ -310,21 +322,27 @@ class ControllerNode(Node):
                     self.flag_angle_See = None
                     self.curve = 0.0
                     self.speed = 0.05
-                    print("Prev or ", self.orientation, "        new or   ", self.next_direction)
                     self.orientation = self.next_direction
                     self.next_direction = None
+                    self.STATE = 2
+
                 self.curve_state = 1
 
-        elif self.STATE == 0.5:
+        elif self.STATE == 1:
             cmd_vel.linear.x  = self.speed 
             print(time.time() - self.timer_05)
             if time.time() - self.timer_05 >=3:
-                self.STATE == 1
+                self.STATE = 999
                 self.speed = 0.0
-                
+        elif self.STATE == 2:
+            self.speed  = 0.05
+            cmd_vel.linear.x  = -self.speed 
+            if self.timer_02 is None:
+                self.timer_02 = time.time()
+            if time.time() - self.timer_02 > 2:
+                self.STATE = 0
+                self.timer_02 = None
 
-
-                
         self.vel_publisher.publish(cmd_vel)
 
 

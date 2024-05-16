@@ -225,13 +225,27 @@ def select_type(img,threshold_first_last=10, show=True,debug=False):
                 longest_line = x2-x1
                 longest_line_line = line
 
-        # check if longest_line is centered, x1 and x2 are mirrored given a threshold of 2 px
         is_centered = False
-        px_threshold = 2
-        if longest_line_line is not None:
-            x1, y1, x2, y2 = longest_line_line
-            if abs(x1-img.shape[1]/2) < px_threshold and abs(x2-img.shape[1]/2) < px_threshold:
-                is_centered = True
+        # check if exist non horizontal lines that are near x_1 y_1 and x_2 y_2 of longest_line_line
+        flag_left = False
+        flag_right = False
+        for line in not_horizontal_lines:
+            x1, y1, x2, y2 = line[0]
+            # check if any the two points of the line are near the two points of the longest line
+            # left
+            if abs(x1-longest_line_line[0]) < 10 and abs(y1-longest_line_line[1]) < 10:
+                flag_left = True
+            if abs(x1-longest_line_line[2]) < 10 and abs(y1-longest_line_line[3]) < 10:
+                flag_left = True
+
+            # right
+            if abs(x2-longest_line_line[0]) < 10 and abs(y2-longest_line_line[1]) < 10:
+                flag_right = True
+            if abs(x2-longest_line_line[2]) < 10 and abs(y2-longest_line_line[3]) < 10:
+                flag_right = True   
+
+            
+        is_centered = flag_left and flag_right
 
 
 
@@ -473,14 +487,16 @@ def get_pendence(img):
     high_threshold = 195
     mask = cv2.inRange(gray, low_threshold, high_threshold)
     edges = cv2.Canny(mask, 50, 200)
+    kernel = np.ones((2,2),np.uint8)
+    edges = cv2.dilate(edges,kernel,iterations = 1)
     lines = cv2.HoughLinesP(edges, 1, np.pi/180, 100, minLineLength=150, maxLineGap=50)
 
 
     if lines is None:
         return None
     
-    
-    lines = [line for line in lines if abs((line[0][3]-line[0][1])/(line[0][2]-line[0][0])) < 0.5]
+    # add 0.00001 to avoid division by 0
+    lines = [line for line in lines if abs((line[0][3]-line[0][1])/(line[0][2]-line[0][0]+ 0.00001)) < 0.5]
 
     # remove all line wit y1 and y2 > 5/6 of the image
     lines = [line for line in lines if line[0][1] < img.shape[0]*5/6 and line[0][3] < img.shape[0]*5/6]

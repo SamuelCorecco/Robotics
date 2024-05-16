@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib.animation import FuncAnimation
 
+from Robotics_Project.utility_robo import swap_dir_array
 class Node_graph:
     def __init__(self, id):
         self.id = id
@@ -70,6 +71,28 @@ class Graph:
         
         self.update_plot()
 
+    def exist_closed_node(self, prev_node, direction, distance, neighboor, threshold=0.1):
+        pos_dist = {'N': (0, 1), 'S': (0, -1), 'E': (1, 0), 'O': (-1, 0)}[direction]
+        x, y = self.nodes[prev_node].get_position()
+        pos_dist = (pos_dist[0] * distance, pos_dist[1] * distance)
+        x += pos_dist[0]
+        y += pos_dist[1]
+        # search in all nodes if there is a node with the same position
+        for id, node in self.nodes.items():
+            x_node, y_node = node.get_position()
+            if abs(x_node - x) < threshold and abs(y_node - y) < threshold:
+                # check if the node have same neighboor in form ex [0,1,0,1]
+                neighboor_node = [1 if node.get_neighbor(dir)[0] != 'X' else 0 for dir in ['N', 'S', 'E', 'O']]
+                print(neighboor_node)
+                # correct neighboor using the direction
+                neighboor = swap_dir_array(neighboor, direction)
+                print("")
+                print(neighboor_node)
+                print(neighboor)    
+                print(neighboor_node == neighboor)
+                if neighboor_node == neighboor:
+                    return id
+        return None
 
 
     def add_unexplored(self, id, dir):
@@ -154,6 +177,10 @@ class Graph:
         x_diff = max(x) - min(x)
         y_diff = max(y) - min(y)
         max_diff = max(x_diff, y_diff)
+
+        if max_diff == 0:
+            max_diff = 1
+            
         self.ax.set_xlim(min(x) - 0.1 * max_diff, max(x) + 0.1 * max_diff)
         self.ax.set_ylim(min(y) - 0.1 * max_diff, max(y) + 0.1 * max_diff)
 
