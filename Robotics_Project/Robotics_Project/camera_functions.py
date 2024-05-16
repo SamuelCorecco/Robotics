@@ -216,15 +216,28 @@ def select_type(img,threshold_first_last=10, show=True,debug=False):
             if x1 < img.shape[0]/2 and x2 > img.shape[0]/2:
                 lines_middle.append(line)
 
+        
         longest_line = 0
+        longest_line_line = None
         for line in lines_middle:
             x1, y1, x2, y2 = line
             if x2-x1 > longest_line:
                 longest_line = x2-x1
+                longest_line_line = line
 
-        #print("len_middle_line", longest_line, img.shape[0] * 6/10)
+        # check if longest_line is centered, x1 and x2 are mirrored given a threshold of 2 px
+        is_centered = False
+        px_threshold = 2
+        if longest_line_line is not None:
+            x1, y1, x2, y2 = longest_line_line
+            if abs(x1-img.shape[1]/2) < px_threshold and abs(x2-img.shape[1]/2) < px_threshold:
+                is_centered = True
 
-        if longest_line < img.shape[1] * 5/10:
+
+
+        # print("len_middle_line", longest_line, img.shape[0] * 6/10, is_centered)
+
+        if longest_line < img.shape[1] * 5/10 or not is_centered:
             number_of_lines = 1000
 
         if debug:
@@ -263,7 +276,8 @@ def select_type(img,threshold_first_last=10, show=True,debug=False):
         # plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
         # plt.title(name)
         # plt.show()
-        cv2.imshow("Image with lines", img)
+        cv2.putText(img, name, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2, cv2.LINE_AA)
+        cv2.imshow("camera style", img)
         cv2.waitKey(1)
 
     return value
@@ -319,20 +333,21 @@ def plot_img_with_line2(img, debug=False):
 
     merged_lines, _ = merge_horizontal_lines(lines)
 
-    # plot the merged lines
-    for line in merged_lines:
-        x1, y1, x2, y2 = line
-        cv2.line(img_tmp, (x1, y1), (x2, y2), (0, 0, 255), 2)
-    plt.imshow(cv2.cvtColor(img_tmp, cv2.COLOR_BGR2RGB))
-    plt.title('Merged Lines')
-    plt.show()
+    if False:
+        # plot the merged lines
+        for line in merged_lines:
+            x1, y1, x2, y2 = line
+            cv2.line(img_tmp, (x1, y1), (x2, y2), (0, 0, 255), 2)
+        plt.imshow(cv2.cvtColor(img_tmp, cv2.COLOR_BGR2RGB))
+        plt.title('Merged Lines')
+        plt.show()
 
-    # show the image with the lines with cv2.imshow
-    for line in merged_lines:
-        x1, y1, x2, y2 = line
-        cv2.line(img_tmp, (x1, y1), (x2, y2), (255, 0, 0), 2)
-        cv2.imshow("Image with lines", img_tmp)
-    cv2.waitKey(1)
+        # show the image with the lines with cv2.imshow
+        for line in merged_lines:
+            x1, y1, x2, y2 = line
+            cv2.line(img_tmp, (x1, y1), (x2, y2), (255, 0, 0), 2)
+            cv2.imshow("Image with lines", img_tmp)
+        cv2.waitKey(1)
 
 
 
@@ -414,8 +429,8 @@ def check_if_sample(img, debug=False):
     ###########################
     ###########################
     ###########################
-    ###########################
-    if False:
+    
+    if True:
         image_tmp = img.copy()
         for line in horizontal_lines:
             x1, y1, x2, y2 = line[0]
@@ -446,3 +461,44 @@ def check_if_sample(img, debug=False):
 
     return Sample_line ,  min_diff 
 
+
+
+
+def get_pendence(img):
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray = cv2.GaussianBlur(gray, (5, 5), 0)
+    gray = cv2.blur(gray, (3, 3))
+    low_threshold = 185
+    high_threshold = 195
+    mask = cv2.inRange(gray, low_threshold, high_threshold)
+    edges = cv2.Canny(mask, 50, 200)
+    lines = cv2.HoughLinesP(edges, 1, np.pi/180, 100, minLineLength=150, maxLineGap=50)
+
+
+    if lines is None:
+        return None
+    
+    
+    lines = [line for line in lines if abs((line[0][3]-line[0][1])/(line[0][2]-line[0][0])) < 0.5]
+
+    # remove all line wit y1 and y2 > 5/6 of the image
+    lines = [line for line in lines if line[0][1] < img.shape[0]*5/6 and line[0][3] < img.shape[0]*5/6]
+    # remove line with y1 and y2 < 1/6 of the image
+    lines = [line for line in lines if line[0][1] > img.shape[0]*1/6 and line[0][3] > img.shape[0]*1/6]
+    if len(lines) == 0:
+        return None
+    
+    # plot the lines
+    if True:
+        for line in lines:
+            x1, y1, x2, y2 = line[0]
+            cv2.line(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.imshow("Image with lines", img)
+        cv2.waitKey(1)
+    
+    # get the line with the smallest y
+    lines_sorted = sorted(lines, key=lambda x: x[0][3])
+    x1, y1, x2, y2 = lines_sorted[0][0]
+
+    return (y2-y1)/(x2-x1)

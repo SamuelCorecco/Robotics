@@ -101,6 +101,14 @@ class Graph:
         self.G.add_edge(id1, id2)
         self.update_plot()
 
+
+    def get_direction_uneplored(self, id):
+        for dir, (id_neighbor, _) in self.nodes[id].neighbors.items():
+            if id_neighbor == '?':
+                return dir
+        return None
+            
+
     def closest_unexplored(self, id):
         # case 1 the node id is not complete, so we need to return the direction of the first unexplored neighbor and is id
         if not self.nodes[id].is_complete():
