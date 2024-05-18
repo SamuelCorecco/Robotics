@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-def merge_horizontal_lines(lines, horizontal_threshold=10, merge_threshold=5, top_threshold=10):
+def merge_horizontal_lines(lines, horizontal_threshold=5, merge_threshold=5, top_threshold=15):
 
     # check if is empty
     if lines is None or len(lines) == 0:
@@ -39,7 +39,7 @@ def merge_horizontal_lines(lines, horizontal_threshold=10, merge_threshold=5, to
                 y2_new = max(y2, last_y2)
                 x1_new = min(x1, last_x1)
                 y1_new = min(y1, last_y1)
-                last_line = [(x1_new, y1_new, x2_new, y2_new)]
+                last_line = [(last_x1, last_y1, x2, y2)]
             else:
                 merged_lines.extend(last_line)
                 last_line = line
@@ -138,7 +138,7 @@ CASES_NAME = {
 #         number_of_lines = 3
 
 
-
+# prima 10
 def select_type(img,threshold_first_last=10, show=True,debug=False):
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)

@@ -88,8 +88,13 @@ class ControllerNode(Node):
                                     # STATE 3 == No sample we go direct on a wall
                                     # 
                                     # STATE 999 == GO next node to explore cambia pure numero
-        self.timer_05 = None
+        self.timer_05 = None        # prev state time we can use for compute a fake distance 
         self.timer_02 = None        # timer to go back in state 2
+        self.timer_03 = None        # timer to correct the prev time if we curve
+
+        self.prev_state = (0,0)     # use odometry to compute distance in meters
+        self.current_ste = (0,0)
+        
 
 
 
@@ -122,6 +127,7 @@ class ControllerNode(Node):
             #           b) whether we are straight or crooked during forward movement
             
             sample_flag, angle_to_move = check_if_sample(image_tmp)
+
 
             # if we need to correct angle we use information of slope of the straight line 
             # to get the angle correction 
@@ -186,7 +192,10 @@ class ControllerNode(Node):
                     curr_time = time.time()
                     if self.prev_node_id >= 0:
                         distance = (curr_time - self.old_time)
-                        is_close_a_node = self.graph.exist_closed_node(self.prev_node_id,self.orientation,distance,max_key, threshold=2)
+                        distance = max(distance, 3.0)
+                        distance = (distance + (3 - distance % 3) % 3)/3
+                        #distance = max(abs(self.prev_state[0] - self.current_ste[0]), abs(self.prev_state[1] - self.current_ste[1]))
+                        is_close_a_node = self.graph.exist_closed_node(self.prev_node_id,self.orientation,distance,max_key, threshold=0.1)
                         # if the node is already visited stop and go next node
                         if is_close_a_node is not None:
                             self.graph.add_edge(self.prev_node_id , is_close_a_node, self.orientation, distance)
@@ -197,12 +206,19 @@ class ControllerNode(Node):
                         
                         self.graph.add_edge(self.prev_node_id , new_node_id, self.orientation, distance)
                     else:
+                        print("NEW NODE GVNG")
                         self.graph.add_node(new_node_id, 0, 0)
                     self.prev_node_id = new_node_id
                     self.max_node_id = new_node_id
                     self.old_time = curr_time
+                    self.prev_state = self.current_ste
                     self.graph.node_information(new_node_id, max_key)
                     #print("Node info: ", max_key)
+        
+        elif self.STATE == 2:
+            bridge = CvBridge()
+            cv_image = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            self.flag_angle_See = get_pendence(cv_image)
         
         
 
@@ -236,7 +252,7 @@ class ControllerNode(Node):
 
                 else:
                     self.angle_rot = 0
-                    self.threshoold += 0.002        # this is done for better accuration
+                    self.threshoold += 0.002        # this is done for better accuracy
                     if self.threshoold > 0.02:
                         self.threshoold = 0.01      # reset the initial threshoold
                         self.STATE = 999
@@ -264,7 +280,7 @@ class ControllerNode(Node):
                         # if we are in 0.15 we can't use back sensore
                         self.speed = 0.02
                 elif self.go_back == 0:
-                    next_dir = self.graph.get_direction_uneplored(self.prev_node_id, self.orientation)
+                    next_dir = self.graph.get_direction_unexplored(self.prev_node_id, self.orientation)
                     if next_dir:
                         self.curve = get_angle(self.orientation, next_dir)
                         self.next_direction = next_dir
@@ -292,6 +308,7 @@ class ControllerNode(Node):
     def odom_callback(self, msg):
         self.odom_pose = msg.pose.pose
         self.odom_valocity = msg.twist.twist
+        self.current_ste = (self.odom_pose.position.x, self.odom_pose.position.y)
         
     
     def pose3d_to_2d(self, pose3):
@@ -350,17 +367,26 @@ class ControllerNode(Node):
 
         elif self.STATE == 2:
             self.speed  = self.NORMAL_SPEED
-            cmd_vel.linear.x  = -self.speed 
+            cmd_vel.linear.x  = -self.speed
+            # FLAG CIAO
+            if self.flag_angle_See is not None:
+                cmd_vel.angular.z = -self.flag_angle_See*5.0
             if self.timer_02 is None:
                 self.timer_02 = time.time()
             if time.time() - self.timer_02 > 2:
                 self.STATE = 0
+                self.old_time = time.time() - 1
                 self.timer_02 = None
 
         elif self.STATE == 3 :
             cmd_vel.linear.x  = self.speed 
-        
 
+        # stato 4 set path
+        # stato 5 set next node
+        # stato 6 go next node
+
+        
+        # self.graph.print_nodes()
         self.vel_publisher.publish(cmd_vel)
 
 
