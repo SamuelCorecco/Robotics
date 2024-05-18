@@ -196,6 +196,42 @@ class Graph:
     #     plt.draw()
     #     plt.pause(0.5)  # Pause to allow update
 
+    def update_plot2(self):
+        self.ax.clear()  # Clears the current axes
+
+        # Plot the checkerboard
+        self.plot_checkerboard()
+
+        # Node colors
+        node_color = ['blue' if id not in self.not_info else 'black' for id in self.nodes]
+        node_color = ['red' if id in [n for n, _ in self.unexplored] else color for id, color in zip(self.nodes, node_color)]
+
+        # Draw the graph
+        nx.draw(self.G, self.positions, with_labels=True, node_size=1000, node_color=node_color, font_size=10, 
+                font_weight='bold', font_color='black', edge_color='black', width=2, ax=self.ax)
+
+        # Draw arrows for unexplored directions
+        for id, dir in self.unexplored:
+            x, y = self.positions[id]
+            dx, dy = {'N': (0, 0.1), 'S': (0, -0.1), 'E': (0.1, 0), 'O': (-0.1, 0)}[dir]
+            self.ax.arrow(x, y, dx, dy, head_width=0.05, head_length=0.1, fc='gray', ec='gray')
+
+        # Set axis limits
+        x = [x for x, _ in self.positions.values()]
+        y = [y for _, y in self.positions.values()]
+        x_diff = max(x) - min(x)
+        y_diff = max(y) - min(y)
+        max_diff = max(x_diff, y_diff)
+
+        if max_diff == 0:
+            max_diff = 1
+
+        self.ax.set_xlim(min(x) - 0.1 * max_diff, max(x) + 0.1 * max_diff)
+        self.ax.set_ylim(min(y) - 0.1 * max_diff, max(y) + 0.1 * max_diff)
+
+        plt.draw()
+        plt.pause(0.5)  # Pause to allow update
+
     def update_plot(self):
         self.ax.clear()  # Clears the current axes
 
@@ -215,6 +251,23 @@ class Graph:
             x, y = self.positions[id]
             dx, dy = {'N': (0, 0.1), 'S': (0, -0.1), 'E': (0.1, 0), 'O': (-0.1, 0)}[dir]
             self.ax.arrow(x, y, dx, dy, head_width=0.05, head_length=0.1, fc='gray', ec='gray')
+
+        # Draw walls where there are no neighbors
+        for node in self.nodes:
+            x, y = self.positions[node]
+            neighbors = list(self.G.neighbors(node))
+
+            for neighbor in neighbors:
+                x_neighbor, y_neighbor = self.positions[neighbor]
+                if not (x_neighbor == x and y < y_neighbor):
+                    self.ax.plot([x - 0.5, x + 0.5], [y + 0.5, y + 0.5], color='green', linewidth=3)
+                if not (x_neighbor == x and y > y_neighbor):
+                    self.ax.plot([x - 0.5, x + 0.5], [y - 0.5, y - 0.5], color='green', linewidth=3)
+                if not (x < x_neighbor and y_neighbor == y):
+                    self.ax.plot([x + 0.5, x + 0.5], [y - 0.5, y + 0.5], color='green', linewidth=3)
+                if not (x > x_neighbor and y_neighbor == y):
+                    self.ax.plot([x - 0.5, x - 0.5], [y - 0.5, y + 0.5], color='green', linewidth=3)
+                
 
         # Set axis limits
         x = [x for x, _ in self.positions.values()]
