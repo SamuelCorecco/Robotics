@@ -57,6 +57,9 @@ class Graph:
     def print_nodes(self):
         for id, node in self.nodes.items():
             node.print_node_info()
+    
+    def get_node(self, id):
+        return self.nodes[id]
 
     def add_node(self, id, x, y):
         node = Node_graph(id)
@@ -132,6 +135,24 @@ class Graph:
         self.G.add_edge(id1, id2)
         self.update_plot()
 
+
+    def get_direction_node_to_node(self, id1, id2):
+        if id1 == id2:
+            return None
+        
+        x1, y1 = self.nodes[id1].get_position()
+        x2, y2 = self.nodes[id2].get_position()
+        if x1 == x2:
+            if y1 < y2:
+                return 'N'
+            else:
+                return 'S'
+        if y1 == y2:
+            if x1 < x2:
+                return 'E'
+            else:
+                return 'O'
+        return None
 
     def get_direction_unexplored(self, id, direction):
         opposite = {'N': 'S', 'S': 'N', 'E': 'O', 'O': 'E'}[direction]
@@ -256,18 +277,46 @@ class Graph:
         for node in self.nodes:
             x, y = self.positions[node]
             neighbors = list(self.G.neighbors(node))
+            question_neighbors = [dir for dir, (id_neighbor, _) in self.nodes[node].neighbors.items() if id_neighbor == '?']
+
+            #print(f'Node {node} has neighbors {neighbors} and question neighbors {question_neighbors}')
+
+            n_up = False
+            n_down = False
+            n_right = False
+            n_left = False
 
             for neighbor in neighbors:
                 x_neighbor, y_neighbor = self.positions[neighbor]
-                if not (x_neighbor == x and y < y_neighbor):
-                    self.ax.plot([x - 0.5, x + 0.5], [y + 0.5, y + 0.5], color='green', linewidth=3)
-                if not (x_neighbor == x and y > y_neighbor):
-                    self.ax.plot([x - 0.5, x + 0.5], [y - 0.5, y - 0.5], color='green', linewidth=3)
-                if not (x < x_neighbor and y_neighbor == y):
-                    self.ax.plot([x + 0.5, x + 0.5], [y - 0.5, y + 0.5], color='green', linewidth=3)
-                if not (x > x_neighbor and y_neighbor == y):
-                    self.ax.plot([x - 0.5, x - 0.5], [y - 0.5, y + 0.5], color='green', linewidth=3)
-                
+                if (x_neighbor == x and y < y_neighbor) or 'N' in question_neighbors:  # neighbor is above
+                    n_up = True
+                    for y_mid in np.arange(y+1, y_neighbor-1):
+                        self.ax.plot([x - 0.5, x - 0.5], [y_mid - 0.5, y_mid + 0.5], color='black', linewidth=4)
+                        self.ax.plot([x + 0.5, x + 0.5], [y_mid - 0.5, y_mid + 0.5], color='black', linewidth=4)
+                if (x_neighbor == x and y > y_neighbor) or 'S' in question_neighbors:  # neighbor is below
+                    n_down = True
+                    for y_mid in np.arange(y_neighbor + 1, y):
+                        self.ax.plot([x - 0.5, x - 0.5], [y_mid - 0.5, y_mid + 0.5], color='black', linewidth=4)
+                        self.ax.plot([x + 0.5, x + 0.5], [y_mid - 0.5, y_mid + 0.5], color='black', linewidth=4)
+                if (y_neighbor == y and x < x_neighbor) or 'E' in question_neighbors:  # neighbor is right
+                    n_right = True
+                    for x_mid in np.arange(x+1, x_neighbor-1):
+                        self.ax.plot([x_mid - 0.5, x_mid + 0.5], [y - 0.5, y - 0.5], color='black', linewidth=4)
+                        self.ax.plot([x_mid - 0.5, x_mid + 0.5], [y + 0.5, y + 0.5], color='black', linewidth=4)
+                if (y_neighbor == y and x > x_neighbor) or 'O' in question_neighbors:  # neighbor is left
+                    n_left = True
+                    for x_mid in np.arange(x_neighbor + 1, x):
+                        self.ax.plot([x_mid - 0.5, x_mid + 0.5], [y - 0.5, y - 0.5], color='black', linewidth=4)
+                        self.ax.plot([x_mid - 0.5, x_mid + 0.5], [y + 0.5, y + 0.5], color='black', linewidth=4)
+
+            if not n_up:
+                self.ax.plot([x - 0.5, x + 0.5], [y + 0.5, y + 0.5], color='black', linewidth=4)
+            if not n_down:
+                self.ax.plot([x - 0.5, x + 0.5], [y - 0.5, y - 0.5], color='black', linewidth=4)
+            if not n_right:
+                self.ax.plot([x + 0.5, x + 0.5], [y - 0.5, y + 0.5], color='black', linewidth=4)
+            if not n_left:
+                self.ax.plot([x - 0.5, x - 0.5], [y - 0.5, y + 0.5], color='black', linewidth=4)
 
         # Set axis limits
         x = [x for x, _ in self.positions.values()]
@@ -332,7 +381,20 @@ class Graph:
         _, previous_nodes = self.find_shortest_path(from_node)
         path = []
         current_node = to_node
-        while current_node:
+        while current_node is not None:
             path.append(current_node)
             current_node = previous_nodes[current_node]
+        # path.pop(0)
         return path[::-1]
+    
+    def print_graph_code_to_build(self):
+        print("graph = Graph()")
+        for id, node in self.nodes.items():
+            x, y = node.get_position()
+            print(f"graph.add_node('{id}', {x}, {y})")
+            positions = [1 if node.get_neighbor(dir)[0] != 'X' else 0 for dir in ['N', 'S', 'E', 'O']]
+            print(f"graph.node_information('{id}', {positions})")
+            for dir, (id_neighbor, dist) in node.neighbors.items():
+                if id_neighbor != 'X' and id_neighbor != '?':
+                    print(f"graph.add_edge('{id}', '{id_neighbor}', '{dir}', {dist})")
+    

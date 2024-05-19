@@ -86,15 +86,30 @@ class ControllerNode(Node):
                                     # STATE 1 == EXPLORE but we are in front of an explored node --> we need to enter do 3 sec go forward
                                     # STATE 2 == we are rotate for do a curve, we need to go back to see next node
                                     # STATE 3 == No sample we go direct on a wall
-                                    # 
+                                    # STATE 4 == DEAD_END
+                                    # STATE 5 == DEAD_END 180 DEG
                                     # STATE 999 == GO next node to explore cambia pure numero
         self.timer_05 = None        # prev state time we can use for compute a fake distance 
         self.timer_02 = None        # timer to go back in state 2
         self.timer_03 = None        # timer to correct the prev time if we curve
+        self.timer_04 = None        # Needed to know when to turn if when going to the next unexplored node there isn't a wall to use for turning
+        self.timer_01 = None
+        self.timer_06 = None        # timer to rotate in state 996
+        self.time_until_Stop = None
 
         self.prev_state = (0,0)     # use odometry to compute distance in meters
         self.current_ste = (0,0)
-        
+
+
+        # STESTE GO NEXT TO EXPLORE
+        self.path_to_follow = []            # path to follow 
+        self.next_node_targ = [-1, "X"]     # next node
+
+        self.continue_same_direction = False
+        self.restart_explore = False
+
+
+        self.PREV_STATE = -1
 
 
 
@@ -166,7 +181,7 @@ class ControllerNode(Node):
                         flag = True
                     else:
                         dict_count[key_val] += 1
-                    i -= 11
+                    i -= 1
                 
                 self.sample_next_node = [None]
 
@@ -178,7 +193,7 @@ class ControllerNode(Node):
                     
                     # If dead end we activate flag to rotate!
                     if max_key  == [0,1,0,0]:
-                        self.go_back = 1
+                        self.STATE = 4
                     elif max_key[0] == 0:
                         self.STATE = 3
 
@@ -206,16 +221,19 @@ class ControllerNode(Node):
                         
                         self.graph.add_edge(self.prev_node_id , new_node_id, self.orientation, distance)
                     else:
-                        print("NEW NODE GVNG")
                         self.graph.add_node(new_node_id, 0, 0)
                     self.prev_node_id = new_node_id
                     self.max_node_id = new_node_id
                     self.old_time = curr_time
                     self.prev_state = self.current_ste
                     self.graph.node_information(new_node_id, max_key)
-                    #print("Node info: ", max_key)
         
         elif self.STATE == 2:
+            bridge = CvBridge()
+            cv_image = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            self.flag_angle_See = get_pendence(cv_image)
+
+        elif self.STATE == 997 or self.STATE == 998 or self.STATE == 998_2:
             bridge = CvBridge()
             cv_image = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
             self.flag_angle_See = get_pendence(cv_image)
@@ -241,22 +259,34 @@ class ControllerNode(Node):
         
         # Rotation for the dead end
         # this just align the back sensors
-        if self.STATE == 0:
-            if self.go_back == 2:
+        if self.STATE == 5:
+            if self.timer_01 is not None and time.time() - self.timer_01 > 1:
                 diff_r_l = np.sign(self.back_r )*self.back_r - np.sign(self.back_l )*self.back_l
+                self.angle_rot = 1.0
                 if (self.back_r == -1 or self.back_l ==-1) or np.abs(diff_r_l) > self.threshoold:
                     self.angle_rot = 0.2
                     if (self.back_r != -1 or self.back_l !=-1):
                         self.angle_rot = -1/2*diff_r_l
                     self.threshoold = 0.003
 
+                    # just in case we are rotate bit not so perfect no problem we use wall :)
+                    if time.time() - self.timer_01 > 2:
+                        self.timer_01 = None
+                        self.threshoold = 0.01     
+                        self.STATE = 6
+                        self.speed = 0  
+                        self.angle_rot = 0.0
+
                 else:
-                    self.angle_rot = 0
-                    self.threshoold += 0.002        # this is done for better accuracy
-                    if self.threshoold > 0.02:
-                        self.threshoold = 0.01      # reset the initial threshoold
-                        self.STATE = 999
-                        self.speed = 0.0 # todo cancella
+                    self.timer_01 = None
+                    self.threshoold = 0.01     
+                    self.STATE = 6
+                    self.speed = 0  
+                    self.angle_rot = 0.0
+                
+
+            else:
+                self.angle_rot = 1.0
         
                 
 
@@ -273,17 +303,42 @@ class ControllerNode(Node):
                 self.angle_rot = 0.0
                 self.speed = 0.0
                 if self.go_back == 1:
-                    if self.center_obj < 0.07:
+                    if self.center_obj < 0.05:
                         self.go_back = 2
                         self.speed = 0.0
                     else:
                         # if we are in 0.15 we can't use back sensore
                         self.speed = 0.02
+
+
                 elif self.go_back == 0:
                     next_dir = self.graph.get_direction_unexplored(self.prev_node_id, self.orientation)
                     if next_dir:
                         self.curve = get_angle(self.orientation, next_dir)
                         self.next_direction = next_dir
+                    else:
+                        self.STATE = 999
+
+        elif self.STATE == 4:
+            if self.center_obj > 0 and self.center_obj < 0.05:
+                self.speed = 0.0
+                self.STATE = 5
+                self.timer_01 = time.time()
+                #LJKHDSK
+
+        elif self.STATE == 998 or self.STATE == 996:
+             if self.center_obj > 0 and self.center_obj < 0.3:
+                self.angle_rot = 0.0
+                self.speed = 0.0
+                self.curve = get_angle(self.orientation, self.next_direction)
+                self.STATE = 997
+
+        elif self.STATE == 998_2:
+            if self.center_obj > 0 and self.center_obj < 0.3:
+                self.angle_rot = 0.0
+                self.speed = 0.0
+
+            
 
 
 
@@ -297,7 +352,6 @@ class ControllerNode(Node):
             
 
     def start(self):
-        print("START")
         plt.show(block=False)
         self.timer = self.create_timer(1/60, self.update_callback)
     
@@ -358,6 +412,8 @@ class ControllerNode(Node):
                     self.STATE = 2
 
                 self.curve_state = 1
+
+
         elif self.STATE == 1:
 
             cmd_vel.linear.x  = self.speed 
@@ -381,13 +437,209 @@ class ControllerNode(Node):
         elif self.STATE == 3 :
             cmd_vel.linear.x  = self.speed 
 
-        # stato 4 set path
-        # stato 5 set next node
-        # stato 6 go next node
+        elif self.STATE == 4 :
+            self.speed = self.NORMAL_SPEED
+            cmd_vel.linear.x  = self.speed 
+            
+        elif self.STATE == 5:
+            cmd_vel.linear.x  = 0.0
+            cmd_vel.angular.z = 1/2*self.angle_rot
 
+
+        elif self.STATE == 6 : 
+            self.speed = self.NORMAL_SPEED
+            cmd_vel.linear.x  = -self.speed  
+
+            if self.timer_02 is None:
+                self.timer_02 = time.time()
+
+            if time.time() - self.timer_02 > 2:
+                self.STATE = 999
+                self.old_time = time.time() - 1
+                self.timer_02 = None
+                opposite_direction = {'N': 'S', 'S': 'N', 'E': 'O', 'O': 'E'}[self.orientation]
+                self.orientation = opposite_direction
+
+
+        # stato 4 set path
+        # SET THE NEXT DIRECTION FROM WALL
+        elif self.STATE == 999:
+            if len(self.path_to_follow) == 0:
+                target = self.graph.closest_unexplored(self.prev_node_id)                   # form Node_id, Direction
+                self.path_to_follow = self.graph.get_path(self.prev_node_id ,target[0])
+            print("pat da incula bastardi negri ebrei dewl cazzo morti bastardi", self.path_to_follow)
+            #print(self.graph.print_graph_code_to_build())
+            if len(self.path_to_follow) > 0:
+
+
+                flag_last_same_direction = False
+
+                if len(self.path_to_follow) == 2:
+                        self.restart_explore  = True
+                        self.prev_node_id = self.path_to_follow[0]
+                        self.next_direction = self.graph.get_direction_unexplored(self.path_to_follow[1], self.orientation) 
+
+                        print(self.next_direction)
+
+                        flag_last_same_direction = True #self.next_direction == self.orientation
+
+                        self.STATE = 998_2
+
+                        self.timer_04 = time.time()
+                            
+                        node_a = self.graph.get_node(self.path_to_follow[0])
+                        node_b = self.graph.get_node(self.path_to_follow[1])                    
+                        self.time_until_Stop = max(abs(node_a.position[0]- node_b.position[0]), abs(node_a.position[1]- node_b.position[1]))*3
+                
+
+
+                else:
+                    self.next_node_targ = None
+                    idx = 0
+
+                
+                    # TODO caso ultimo stessa direzione
+                    tmp_node = None
+                    while idx < len(self.path_to_follow):
+                        
+                        if self.prev_node_id == self.path_to_follow[idx]:
+                            tmp_node = self.path_to_follow.pop(0)
+                            continue
+                        
+                        next_direction = self.graph.get_direction_node_to_node(self.path_to_follow[idx], self.path_to_follow[idx+1])
+                        print("orientale: ", self.orientation, "anale:", next_direction, "from node to node id",tmp_node, self.path_to_follow[idx])
+                        # case id ==
+                        if next_direction is None:
+                            tmp_node = self.path_to_follow.pop(0)
+                            continue
+                        elif next_direction == self.orientation:
+                            tmp_node = self.path_to_follow.pop(0)
+                            continue
+                        else:
+                            self.next_direction = next_direction
+                            self.STATE = 998
+                            break
+                    
+                    print(self.path_to_follow)
+
+                    node_a = self.graph.get_node(self.prev_node_id)
+                    node_b = self.graph.get_node(self.path_to_follow[0])
+                    if not flag_last_same_direction and node_b.neighbors[self.orientation][0] != 'X':
+                        self.STATE = 998_2
+                        self.timer_04 = time.time()
+                        self.time_until_Stop = max(abs(node_a.position[0]- node_b.position[0]), abs(node_a.position[1]- node_b.position[1]))*3 
+                    
+
+            self.speed  = self.NORMAL_SPEED
+            cmd_vel.linear.x  = self.speed 
+
+        # VAI A SBATTERE FRONTALE 
+        elif self.STATE == 998:
+            cmd_vel.linear.x  = self.speed 
+            if self.flag_angle_See:
+                cmd_vel.angular.z = -self.flag_angle_See*2.0
         
+        elif self.STATE == 998_2:
+            cmd_vel.linear.x  = self.speed 
+            if self.flag_angle_See:
+                cmd_vel.angular.z = -self.flag_angle_See*2.0
+            
+            # same thing to front wall
+            # NOTA treshold 0.2 for precision
+            if time.time() - self.timer_04 >= self.time_until_Stop + 0.5:
+                self.STATE = 997
+                self.timer_04 = None
+                self.angle_rot = 0.0
+                self.speed = 0.0
+                self.curve = get_angle(self.orientation, self.next_direction)
+                if self.orientation == self.next_direction:
+                    self.curve = 0.0
+
+                self.STATE = 997
+
+            
+        # TI GIRI
+        elif self.STATE == 997:
+            
+            cmd_vel.angular.z = 1.0/2 * self.curve
+
+
+            if self.timer_06 is None:
+                self.timer_06 = time.time()
+
+            if self.flag_angle_See and time.time() - self.timer_06 > 0.2:
+                cmd_vel.angular.z = - self.flag_angle_See*5.0
+
+            if time.time() - self.timer_06 > 3 or (self.curve_state == 1 and (self.flag_angle_See is not None and abs(self.flag_angle_See) > 0.02) and time.time() - self.timer_06 > 1):
+                self.curve_state = 0
+                self.flag_angle_See = None
+                self.curve = 0.0
+                self.speed = self.NORMAL_SPEED
+                self.orientation = self.next_direction
+                self.next_direction = None
+                self.timer_06 = None
+                self.STATE = 996
+            
+            self.curve_state = 1
+
+        # ALLINEAMENTO MURO all'indietro
+        elif  self.STATE == 996:
+            self.speed  = self.NORMAL_SPEED
+            cmd_vel.linear.x  = -self.speed
+            # FLAG CIAO
+            if self.flag_angle_See is not None:
+                cmd_vel.angular.z = -self.flag_angle_See*5.0
+            if self.timer_02 is None:
+                self.timer_02 = time.time()
+
+            if time.time() - self.timer_02 > 2 or (self.continue_same_direction and time.time() - self.timer_02 > 1.5):
+                
+                # restart exploration
+                if self.restart_explore :
+
+                    self.prev_node_id = self.path_to_follow[-1]
+                                
+                    self.time_until_Stop = None
+                    self.path_to_follow = []           
+                    self.next_node_targ = [-1, "X"] 
+                    self.timer_02 = None  
+                    self.timer_03 = None        
+                    self.timer_04 = None        
+                    self.time_until_Stop = None
+                    self.curve = 0.0
+
+                    self.STATE = 0
+                    self.speed = self.NORMAL_SPEED
+                    self.restart_explore = False
+
+                    self.old_time = time.time()-2
+                    if self.continue_same_direction:
+                        self.old_time += 1
+                    
+                
+                else:
+                    self.STATE = 999
+                    tmp_node = self.prev_node_id 
+                    self.prev_node_id = self.path_to_follow[0]
+                    self.timer_02 = None
+
+                    if self.graph.get_direction_unexplored(self.prev_node_id, self.orientation):
+                        self.next_direction = self.graph.get_direction_unexplored(self.prev_node_id, self.orientation)
+                        self.STATE = 998_2
+                        self.timer_04 = time.time()
+                        node_a = self.graph.get_node(tmp_node)
+                        node_b = self.graph.get_node(self.prev_node_id)
+                        self.time_until_Stop = max(abs(node_a.position[0]- node_b.position[0]), abs(node_a.position[1]- node_b.position[1]))*3
+
         # self.graph.print_nodes()
+        
         self.vel_publisher.publish(cmd_vel)
+
+        if self.PREV_STATE != self.STATE:
+            print( self.STATE)
+            self.PREV_STATE = self.STATE
+    
+
 
 
 
@@ -406,7 +658,6 @@ def main():
         pass
     
     # Ensure the Thymio is stopped before exiting
-    print("NO FRA")
     node.stop()
 
 
