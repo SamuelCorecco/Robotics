@@ -70,7 +70,7 @@ class ControllerNode(Node):
         # controller for robot
         self.speed = self.NORMAL_SPEED   # speed
         self.angle_rot = 0.0        # angle
-        self.orientation = "E"      # orienttation
+        self.orientation = "O"      # orienttation
 
         # flag for our FSM
         self.go_back = 0            # this is a flag to move in case of EXPLORARION AND DEADEND
@@ -88,6 +88,8 @@ class ControllerNode(Node):
                                     # STATE 3 == No sample we go direct on a wall
                                     # STATE 4 == DEAD_END
                                     # STATE 5 == DEAD_END 180 DEG
+
+        self.FALG_TMP = -1          # state tmp to convert toreal state
                                     # STATE 999 == GO next node to explore cambia pure numero
         self.timer_05 = None        # prev state time we can use for compute a fake distance 
         self.timer_02 = None        # timer to go back in state 2
@@ -110,6 +112,7 @@ class ControllerNode(Node):
 
 
         self.PREV_STATE = -1
+        self.PREV_BACK = 0.0               # if we move after hit wall we have no same time to move that if we go back
 
 
 
@@ -151,7 +154,8 @@ class ControllerNode(Node):
             else: 
                 self.angle_rot = 0.0
             
-
+            if self.FALG_TMP == 1:
+                return
 
             image_tmp = cv_image.copy()
 
@@ -208,7 +212,8 @@ class ControllerNode(Node):
                     if self.prev_node_id >= 0:
                         distance = (curr_time - self.old_time)
                         distance = max(distance, 3.0)
-                        distance = (distance + (3 - distance % 3) % 3)/3
+                        #distance = (distance + (3 - distance % 3) % 3)/3
+                        distance = round(distance / 3) # * 3 /3
                         #distance = max(abs(self.prev_state[0] - self.current_ste[0]), abs(self.prev_state[1] - self.current_ste[1]))
                         is_close_a_node = self.graph.exist_closed_node(self.prev_node_id,self.orientation,distance,max_key, threshold=0.1)
                         # if the node is already visited stop and go next node
@@ -254,13 +259,18 @@ class ControllerNode(Node):
     def rear_l_callback(self,msg):
         self.back_l = msg.range
 
+        # if we go back and we are in the state 996 we set PREV_BACK to correct distance
+        if self.STATE == 996 and (self.back_r == -1 or self.back_l ==-1):
+            self.PREV_BACK  = 1.0
+        
+
     def rear_r_callback(self,msg):
         self.back_r = msg.range
         
         # Rotation for the dead end
         # this just align the back sensors
         if self.STATE == 5:
-            if self.timer_01 is not None and time.time() - self.timer_01 > 1:
+            if self.timer_01 is not None and time.time() - self.timer_01 > 1.5:
                 diff_r_l = np.sign(self.back_r )*self.back_r - np.sign(self.back_l )*self.back_l
                 self.angle_rot = 1.0
                 if (self.back_r == -1 or self.back_l ==-1) or np.abs(diff_r_l) > self.threshoold:
@@ -296,6 +306,7 @@ class ControllerNode(Node):
 
         if self.STATE == 3 and  self.center_obj > 0 and self.center_obj < 0.5:
             self.STATE = 0
+            self.FALG_TMP = 1
         
         # Exploration and hit a wall --> Dead end or we need to curve
         if self.STATE == 0:
@@ -403,13 +414,14 @@ class ControllerNode(Node):
 
                 # if we are in rotation we  check if the camera vision tell us we are correct 90 deg rotate or not
                 # if yes stop rotation if no remain in state rotation
-                if self.curve_state == 1 and self.flag_angle_See == 0:
+                if self.curve_state == 1 and (self.flag_angle_See is not None and abs(self.flag_angle_See) < 0.01):
                     self.flag_angle_See = None
                     self.curve = 0.0
                     self.speed = self.NORMAL_SPEED
                     self.orientation = self.next_direction
                     self.next_direction = None
                     self.STATE = 2
+                    self.FALG_TMP = -1
 
                 self.curve_state = 1
 
@@ -489,7 +501,7 @@ class ControllerNode(Node):
                             
                         node_a = self.graph.get_node(self.path_to_follow[0])
                         node_b = self.graph.get_node(self.path_to_follow[1])                    
-                        self.time_until_Stop = max(abs(node_a.position[0]- node_b.position[0]), abs(node_a.position[1]- node_b.position[1]))*3
+                        self.time_until_Stop = max(abs(node_a.position[0]- node_b.position[0]), abs(node_a.position[1]- node_b.position[1]))*3 
                 
 
 
@@ -546,7 +558,7 @@ class ControllerNode(Node):
             
             # same thing to front wall
             # NOTA treshold 0.2 for precision
-            if time.time() - self.timer_04 >= self.time_until_Stop + 0.5:
+            if time.time() - self.timer_04 >= self.time_until_Stop + 0.5 + self.PREV_BACK:
                 self.STATE = 997
                 self.timer_04 = None
                 self.angle_rot = 0.0
@@ -554,6 +566,8 @@ class ControllerNode(Node):
                 self.curve = get_angle(self.orientation, self.next_direction)
                 if self.orientation == self.next_direction:
                     self.curve = 0.0
+
+                self.PREV_BACK = 0.0
 
                 self.STATE = 997
 
@@ -567,7 +581,7 @@ class ControllerNode(Node):
             if self.timer_06 is None:
                 self.timer_06 = time.time()
 
-            if self.flag_angle_See and time.time() - self.timer_06 > 0.2:
+            if self.flag_angle_See and time.time() - self.timer_06 > 0.5:
                 cmd_vel.angular.z = - self.flag_angle_See*5.0
 
             if time.time() - self.timer_06 > 3 or (self.curve_state == 1 and (self.flag_angle_See is not None and abs(self.flag_angle_See) > 0.02) and time.time() - self.timer_06 > 1):
@@ -579,6 +593,8 @@ class ControllerNode(Node):
                 self.next_direction = None
                 self.timer_06 = None
                 self.STATE = 996
+                # reset go back prepared to comput or not
+                self.PREV_BACK = 0.0
             
             self.curve_state = 1
 
@@ -607,6 +623,7 @@ class ControllerNode(Node):
                     self.timer_04 = None        
                     self.time_until_Stop = None
                     self.curve = 0.0
+                    self.PREV_BACK = 0.0
 
                     self.STATE = 0
                     self.speed = self.NORMAL_SPEED
