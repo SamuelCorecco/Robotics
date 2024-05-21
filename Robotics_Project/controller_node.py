@@ -82,7 +82,9 @@ class ControllerNode(Node):
         self.next_direction = None  # self.next_direction
         self.flag_angle_See = None  # we need to se id line are correct or not
 
-        self.STATE = 0              # STATE 0 == EXPLORE
+        self.STATE = 0              
+                                    # STATE -1 == STOP END EXPLORING
+                                    # STATE 0 == EXPLORE
                                     # STATE 1 == EXPLORE but we are in front of an explored node --> we need to enter do 3 sec go forward
                                     # STATE 2 == we are rotate for do a curve, we need to go back to see next node
                                     # STATE 3 == No sample we go direct on a wall
@@ -97,6 +99,7 @@ class ControllerNode(Node):
         self.timer_04 = None        # Needed to know when to turn if when going to the next unexplored node there isn't a wall to use for turning
         self.timer_01 = None
         self.timer_06 = None        # timer to rotate in state 996
+        self.timer_07 = None        # go back case we are in state 3 in a curve
         self.time_until_Stop = None
 
         self.prev_state = (0,0)     # use odometry to compute distance in meters
@@ -113,6 +116,7 @@ class ControllerNode(Node):
 
         self.PREV_STATE = -1
         self.PREV_BACK = 0.0               # if we move after hit wall we have no same time to move that if we go back
+        self.PREV_BACK2 = 0.0               # if we move after hit wall we have no same time to move that if we find new node
 
 
 
@@ -212,6 +216,7 @@ class ControllerNode(Node):
                     if self.prev_node_id >= 0:
                         distance = (curr_time - self.old_time)
                         distance = max(distance, 3.0)
+                        distance += self.PREV_BACK2                             # add time if before we hit wall we have less time tha normal
                         #distance = (distance + (3 - distance % 3) % 3)/3
                         distance = round(distance / 3) # * 3 /3
                         #distance = max(abs(self.prev_state[0] - self.current_ste[0]), abs(self.prev_state[1] - self.current_ste[1]))
@@ -221,6 +226,7 @@ class ControllerNode(Node):
                             self.graph.add_edge(self.prev_node_id , is_close_a_node, self.orientation, distance)
                             self.prev_node_id = is_close_a_node
                             self.STATE = 1
+                            self.PREV_BACK2 = 0.0                               # reset time
                             self.timer_05 = time.time()
                             return
                         
@@ -232,6 +238,7 @@ class ControllerNode(Node):
                     self.old_time = curr_time
                     self.prev_state = self.current_ste
                     self.graph.node_information(new_node_id, max_key)
+                    self.PREV_BACK2 = 0.0                               # reset time
         
         elif self.STATE == 2:
             bridge = CvBridge()
@@ -261,7 +268,10 @@ class ControllerNode(Node):
 
         # if we go back and we are in the state 996 we set PREV_BACK to correct distance
         if self.STATE == 996 and (self.back_r == -1 or self.back_l ==-1):
-            self.PREV_BACK  = 1.0
+            self.PREV_BACK  = 0.5
+        
+        if self.STATE == 2 and (self.back_r == -1 or self.back_l ==-1):
+            self.PREV_BACK2  = 1.0
         
 
     def rear_r_callback(self,msg):
@@ -412,9 +422,12 @@ class ControllerNode(Node):
                 if self.flag_angle_See:
                     cmd_vel.angular.z = -self.flag_angle_See*2.0
 
+                if self.timer_07 is None:
+                    self.timer_07 = time.time()
+
                 # if we are in rotation we  check if the camera vision tell us we are correct 90 deg rotate or not
                 # if yes stop rotation if no remain in state rotation
-                if self.curve_state == 1 and (self.flag_angle_See is not None and abs(self.flag_angle_See) < 0.01):
+                if ( time.time() - self.timer_07 > 3) or (self.curve_state == 1 and (self.flag_angle_See is not None and abs(self.flag_angle_See) < 0.01)):
                     self.flag_angle_See = None
                     self.curve = 0.0
                     self.speed = self.NORMAL_SPEED
@@ -422,6 +435,7 @@ class ControllerNode(Node):
                     self.next_direction = None
                     self.STATE = 2
                     self.FALG_TMP = -1
+                    self.timer_07 = None
 
                 self.curve_state = 1
 
@@ -478,8 +492,12 @@ class ControllerNode(Node):
         elif self.STATE == 999:
             if len(self.path_to_follow) == 0:
                 target = self.graph.closest_unexplored(self.prev_node_id)                   # form Node_id, Direction
+                if target is None:
+                    self.STATE = -1
+                    self.speed = 0.0
+                    
                 self.path_to_follow = self.graph.get_path(self.prev_node_id ,target[0])
-            print("pat da incula bastardi negri ebrei dewl cazzo morti bastardi", self.path_to_follow)
+                
             #print(self.graph.print_graph_code_to_build())
             if len(self.path_to_follow) > 0:
 
@@ -490,8 +508,6 @@ class ControllerNode(Node):
                         self.restart_explore  = True
                         self.prev_node_id = self.path_to_follow[0]
                         self.next_direction = self.graph.get_direction_unexplored(self.path_to_follow[1], self.orientation) 
-
-                        print(self.next_direction)
 
                         flag_last_same_direction = True #self.next_direction == self.orientation
 
@@ -519,7 +535,6 @@ class ControllerNode(Node):
                             continue
                         
                         next_direction = self.graph.get_direction_node_to_node(self.path_to_follow[idx], self.path_to_follow[idx+1])
-                        print("orientale: ", self.orientation, "anale:", next_direction, "from node to node id",tmp_node, self.path_to_follow[idx])
                         # case id ==
                         if next_direction is None:
                             tmp_node = self.path_to_follow.pop(0)
@@ -532,8 +547,6 @@ class ControllerNode(Node):
                             self.STATE = 998
                             break
                     
-                    print(self.path_to_follow)
-
                     node_a = self.graph.get_node(self.prev_node_id)
                     node_b = self.graph.get_node(self.path_to_follow[0])
                     if not flag_last_same_direction and node_b.neighbors[self.orientation][0] != 'X':
@@ -654,6 +667,7 @@ class ControllerNode(Node):
 
         if self.PREV_STATE != self.STATE:
             print( self.STATE)
+            print( self.PREV_BACK)
             self.PREV_STATE = self.STATE
     
 
