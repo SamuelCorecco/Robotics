@@ -78,6 +78,30 @@ class Graph:
                 if self.nodes[id].get_neighbor(dir)[0] == 'X':
                     self.add_unexplored(id, dir)
                     self.nodes[id].set_neighbor(dir, ('?', 0))
+        
+        # CASE: exist a node in +-1 direction but the node in opposite direction have an X so the edge doesn't exist and we have a wall
+        # since the wall exist the two nodes are not connected so we need to remove the neighbor from the new node
+        for i, pos in enumerate(positions):
+            if pos == 1:
+                dir = ['N', 'S', 'E', 'O'][i]
+                pos_dist = {'N': (0, 1), 'S': (0, -1), 'E': (1, 0), 'O': (-1, 0)}[dir]
+                x, y = self.nodes[id].get_position()
+                pos_dist = (pos_dist[0] * 1, pos_dist[1] * 1)
+                x += pos_dist[0]
+                y += pos_dist[1]
+                # search in all nodes if there is a node with the same position
+                for id_node, node in self.nodes.items():
+                    x_node, y_node = node.get_position()
+                    x_node, y_node = node.get_position()
+                    opposite_dir = {'N': 'S', 'S': 'N', 'E': 'O', 'O': 'E'}[dir]
+                    if abs(x_node - x) < 0.1 and abs(y_node - y) < 0.1 and node.get_neighbor(opposite_dir)[0] == 'X':
+                        print(f"Node {id} and {id_node} are not connected")
+                        self.nodes[id].set_neighbor(dir, ('X', 0))
+                        # remove the unexplored direction
+                        if (id, dir) in self.unexplored:
+                            self.unexplored.remove((id, dir))
+
+
 
         # remove nodde from not_info
         if id in self.not_info:

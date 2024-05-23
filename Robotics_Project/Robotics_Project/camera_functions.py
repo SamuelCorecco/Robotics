@@ -281,6 +281,7 @@ def select_type(img,threshold_first_last=10, show=True,debug=False):
         flag_case_new = False
         # img.shape[1] > 300 to avoid wen we return in exploration and we have smaller image
         if img.shape[1] > 300 and longest_line > img.shape[1] * 13/20:
+            print("Voglio morire")
             if flag_left and not flag_right:
                 number_of_lines = 1
                 first_line = 1
