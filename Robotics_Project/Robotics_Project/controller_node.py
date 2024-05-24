@@ -74,7 +74,7 @@ class ControllerNode(Node):
         # controller for robot
         self.speed = self.NORMAL_SPEED   # speed
         self.angle_rot = 0.0        # angle
-        self.orientation = "N"      # orienttation
+        self.orientation = "S"      # orienttation
 
         # flag for our FSM
         self.go_back = 0            # this is a flag to move in case of EXPLORARION AND DEADEND
@@ -194,7 +194,8 @@ class ControllerNode(Node):
             image_tmp = cv_image.copy()
 
             if self.FLAG_RESTART_EXPLORATION:
-                image_tmp = image_tmp[:, int(image_tmp.shape[1]*0.05):int(image_tmp.shape[1]*0.95)]
+                #image_tmp = image_tmp[:, int(image_tmp.shape[1]*0.05):int(image_tmp.shape[1]*0.95)]
+                image_tmp = image_tmp
 
 
             # STEP 2 we have 2 case:    a) we need to sample the node type
@@ -253,8 +254,8 @@ class ControllerNode(Node):
                     if self.prev_node_id >= 0:
                         distance = (curr_time - self.old_time)
                         distance = (self.current_time - self.TIMER_PREV_D)/4        # NOTE this is the distance using timer of coppelia != real time
-                        print("A ",self.current_time, self.TIMER_PREV_D, self.PREV_BACK2)
                         distance += self.PREV_BACK2                             # add time if before we hit wall we have less time tha normal
+                        distance += 0.5 # correction based on experience
                         distance = max(distance, 3.0)
                         distance = round(distance / 3) 
                         is_close_a_node = self.graph.exist_closed_node(self.prev_node_id,self.orientation,distance,max_key, threshold=0.1)
@@ -423,56 +424,30 @@ class ControllerNode(Node):
     def update_callback(self):
         cmd_vel = Twist() 
 
-        if self.STATE == 0 and False:
-            cmd_vel.linear.x  = self.speed 
-            cmd_vel.angular.z = 5.0 * (self.angle_rot)
-            
-            # case rotate right or left dureing Exploration
-            if self.curve and self.curve != 0.0:
-                
-                # chekc 1 we have already or not the prev angle:
-                cmd_vel.angular.z = 1.0/2 * self.curve
-
-                # if camera see using camera information else curve using fixed value
-                if self.flag_angle_See:
-                    cmd_vel.angular.z = -self.flag_angle_See*2.0
-
-                if self.timer_07 is None:
-                    self.timer_07 = time.time()
-
-                # if we are in rotation we  check if the camera vision tell us we are correct 90 deg rotate or not
-                # if yes stop rotation if no remain in state rotation
-                if ( time.time() - self.timer_07 > 3) or (self.curve_state == 1 and (self.flag_angle_See is not None and abs(self.flag_angle_See) < 0.01)):
-                    self.flag_angle_See = None
-                    self.curve = 0.0
-                    self.speed = self.NORMAL_SPEED
-                    self.orientation = self.next_direction
-                    self.next_direction = None
-                    self.STATE = 2
-                    self.FALG_TMP = -1
-                    self.timer_07 = None
-
-                self.curve_state = 1
-
         if self.STATE == 0 and True:
             cmd_vel.linear.x  = self.speed 
-            cmd_vel.angular.z = 5.0 * (self.angle_rot)
+            cmd_vel.angular.z = 1.0 * (self.angle_rot)
             
             # case rotate right or left dureing Exploration
             if self.curve and self.curve != 0.0:
                 
                 # chekc 1 we have already or not the prev angle:
-                cmd_vel.angular.z = 1.0/2 * self.curve
-
-                # if camera see using camera information else curve using fixed value
-                if self.flag_angle_See:
-                    cmd_vel.angular.z = -self.flag_angle_See*2.0
+                cmd_vel.angular.z = 1.0/4 * self.curve
 
                 if self.TIMER_07_SIM is None:
                     self.TIMER_07_SIM = self.current_time
 
+
+                if ( self.current_time - self.TIMER_07_SIM > 6):
+                    cmd_vel.angular.z = 1.0/10 * self.curve
+
+                # if camera see using camera information else curve using fixed value
+                if self.flag_angle_See:
+                    cmd_vel.angular.z = -self.flag_angle_See*5.0
+
                 # if we are in rotation we  check if the camera vision tell us we are correct 90 deg rotate or not
                 # if yes stop rotation if no remain in state rotation
+
                 if ( self.current_time - self.TIMER_07_SIM > 12) or (self.curve_state == 1 and (self.flag_angle_See is not None and abs(self.flag_angle_See) < 0.01)):
                     self.flag_angle_See = None
                     self.curve = 0.0
@@ -485,12 +460,6 @@ class ControllerNode(Node):
 
                 self.curve_state = 1
 
-        # elif self.STATE == 1 and False:
-
-        #     cmd_vel.linear.x  = self.speed 
-        #     if time.time() - self.timer_05 >=3:
-        #         self.STATE = 999
-        #         self.speed = 0.0
 
         elif self.STATE == 1 and True:
 
@@ -499,19 +468,6 @@ class ControllerNode(Node):
                 self.STATE = 999
                 self.speed = 0.0
 
-        elif self.STATE == 2 and False:
-            self.speed  = self.NORMAL_SPEED
-            cmd_vel.linear.x  = -self.speed
-            # FLAG CIAO
-            if self.flag_angle_See is not None:
-                cmd_vel.angular.z = -self.flag_angle_See*5.0
-            if self.timer_02 is None:
-                self.timer_02 = time.time()
-            if time.time() - self.timer_02 > 2:
-                self.STATE = 0
-                self.old_time = time.time() - 1
-                self.TIMER_PREV_D = self.current_time - 4
-                self.timer_02 = None
 
         elif self.STATE == 2 and True:
             self.speed  = self.NORMAL_SPEED
@@ -562,23 +518,6 @@ class ControllerNode(Node):
                     self.TIMER_01_SIM = None
 
 
-
-
-
-        elif self.STATE == 6 and False: 
-            self.speed = self.NORMAL_SPEED
-            cmd_vel.linear.x  = -self.speed  
-
-            if self.timer_02 is None:
-                self.timer_02 = time.time()
-
-            if time.time() - self.timer_02 > 2:
-                self.STATE = 999
-                self.old_time = time.time() - 1
-                self.TIMER_PREV_D = self.current_time - 4
-                self.timer_02 = None
-                opposite_direction = {'N': 'S', 'S': 'N', 'E': 'O', 'O': 'E'}[self.orientation]
-                self.orientation = opposite_direction
 
         elif self.STATE == 6 and True: 
             self.speed = self.NORMAL_SPEED
@@ -682,7 +621,7 @@ class ControllerNode(Node):
             # same thing to front wall
             # NOTA treshold 0.2 for precision
             # if time.time() - self.timer_04 >= self.time_until_Stop + 0.5 + self.PREV_BACK:
-            if (self.current_time - self.TIMER_PREV_D2)/4 >= self.time_until_Stop + 1.0 + self.PREV_BACK:
+            if (self.current_time - self.TIMER_PREV_D2)/4 >= self.time_until_Stop + 0.5 + self.PREV_BACK:
                 self.STATE = 997
                 self.timer_04 = None
                 self.TIMER_PREV_D2 = None
@@ -696,31 +635,6 @@ class ControllerNode(Node):
 
                 self.STATE = 997
 
-            
-        # TI GIRI
-        elif self.STATE == 997 and False:
-            
-            cmd_vel.angular.z = 1.0/2 * self.curve
-
-
-            if self.timer_06 is None:
-                self.timer_06 = time.time()
-
-            if self.flag_angle_See and time.time() - self.timer_06 > 0.5:
-                cmd_vel.angular.z = - self.flag_angle_See*5.0
-
-            if time.time() - self.timer_06 > 3 or (self.curve_state == 1 and (self.flag_angle_See is not None and abs(self.flag_angle_See) > 0.02) and time.time() - self.timer_06 > 1):
-                self.curve_state = 0
-                self.flag_angle_See = None
-                self.curve = 0.0
-                self.speed = self.NORMAL_SPEED
-                self.orientation = self.next_direction
-                self.next_direction = None
-                self.timer_06 = None
-                self.STATE = 996
-                self.PREV_BACK = 0.0
-            
-            self.curve_state = 1
 
         
         elif self.STATE == 997 and True:
@@ -757,68 +671,7 @@ class ControllerNode(Node):
 
 
 
-
-        # ALLINEAMENTO MURO all'indietro
-        elif  self.STATE == 996 and False:
-            self.speed  = self.NORMAL_SPEED
-            cmd_vel.linear.x  = -self.speed
-            # FLAG CIAO
-            if self.flag_angle_See is not None:
-                cmd_vel.angular.z = -self.flag_angle_See*5.0
-            if self.timer_02 is None:
-                self.timer_02 = time.time()
-
-            if time.time() - self.timer_02 > 2 or (self.continue_same_direction and time.time() - self.timer_02 > 1.5):
-                
-                # restart exploration
-                if self.restart_explore :
-
-                    self.prev_node_id = self.path_to_follow[-1]
-                    self.time_until_Stop = None
-                    self.path_to_follow = []           
-                    self.next_node_targ = [-1, "X"] 
-                    self.timer_02 = None  
-                    self.timer_03 = None        
-                    self.timer_04 = None        
-                    self.time_until_Stop = None
-                    self.curve = 0.0
-                    self.PREV_BACK = 0.0
-
-                    self.STATE = 0
-                    self.speed = self.NORMAL_SPEED
-                    self.restart_explore = False
-                    self.FLAG_RESTART_EXPLORATION = True
-
-                    self.old_time = time.time()-2
-                    self.TIMER_PREV_D = self.current_time - 10
-                    if self.continue_same_direction:
-                        self.old_time += 1
-                        self.TIMER_PREV_D += 8
-                    
-                
-                else:
-                    self.STATE = 999
-                    tmp_node = self.prev_node_id 
-                    self.prev_node_id = self.path_to_follow[0]
-                    self.timer_02 = None
-
-                    if self.graph.get_direction_unexplored(self.prev_node_id, self.orientation):
-                        self.next_direction = self.graph.get_direction_unexplored(self.prev_node_id, self.orientation)
-                        self.STATE = 998_2
-                        self.timer_04 = time.time()
-                        self.TIMER_PREV_D2 = self.current_time
-                        node_a = self.graph.get_node(tmp_node)
-                        node_b = self.graph.get_node(self.prev_node_id)
-                        self.time_until_Stop = max(abs(node_a.position[0]- node_b.position[0]), abs(node_a.position[1]- node_b.position[1]))*3
-
         # self.graph.print_nodes()
-        
-        self.vel_publisher.publish(cmd_vel)
-
-        if self.PREV_STATE != self.STATE:
-            print( self.STATE)
-            print(self.PREV_BACK)
-            self.PREV_STATE = self.STATE
 
 
 
@@ -880,7 +733,6 @@ class ControllerNode(Node):
 
         if self.PREV_STATE != self.STATE:
             print( self.STATE)
-            print(self.PREV_BACK2)
             self.PREV_STATE = self.STATE
     
 

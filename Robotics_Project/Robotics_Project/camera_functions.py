@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-def merge_horizontal_lines(lines, horizontal_threshold=5, merge_threshold=5, top_threshold=15):
+def merge_horizontal_lines(lines, horizontal_threshold=0.02, merge_threshold=7, top_threshold=15):
 
     # check if is empty
     if lines is None or len(lines) == 0:
@@ -18,7 +18,8 @@ def merge_horizontal_lines(lines, horizontal_threshold=5, merge_threshold=5, top
     for line in lines:
         x1, y1, x2, y2 = line[0]
         diff_y = y2 - y1
-        if abs(diff_y) < horizontal_threshold:
+        slope = (y2 - y1)/(x2 - x1)
+        if abs(slope) < horizontal_threshold:
             horizontal_lines.append(line)
         else:
             not_horizontal_lines.append(line)
@@ -281,7 +282,6 @@ def select_type(img,threshold_first_last=10, show=True,debug=False):
         flag_case_new = False
         # img.shape[1] > 300 to avoid wen we return in exploration and we have smaller image
         if img.shape[1] > 300 and longest_line > img.shape[1] * 13/20:
-            print("Voglio morire")
             if flag_left and not flag_right:
                 number_of_lines = 1
                 first_line = 1
