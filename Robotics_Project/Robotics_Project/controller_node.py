@@ -542,6 +542,7 @@ class ControllerNode(Node):
                 if target is None:
                     self.STATE = -1
                     self.speed = 0.0
+                    return
                     
                 self.path_to_follow = self.graph.get_path(self.prev_node_id ,target[0])
                 
