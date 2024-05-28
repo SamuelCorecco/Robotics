@@ -86,14 +86,14 @@ CASES = {
 
 # Just for debug
 CASES_NAME = {  
-    (1,0,0): "punto morto",
-    (3,1,1): "incrocio con tutte le direzioni",
-    (2,0,1): "incrocio avanti e destra",
-    (2,1,0): "incrocio avanti e sinistra",
-    (2,1,1): "incrocio destra e sinistra",
-    (1, 1, 1): "incrocio destra e sinistra",
-    (1,1,0): "curva left",
-    (1,0,1): "curva right"
+    (1,0,0): "dead end",
+    (3,1,1): "x intersection",
+    (2,0,1): "forward and right intersection",
+    (2,1,0): "forward and left intersection",
+    (2,1,1): "T intersection",
+    (1, 1, 1): "T intersection",
+    (1,1,0): "left turn",
+    (1,0,1): "right turn"
 }
 
 
